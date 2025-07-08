@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Таблица умножения</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      background: #f0f8ff;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+
+    #app {
+      max-width: 400px;
+      width: 90%;
+      background: white;
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+      text-align: center;
+    }
+
+    h1, h2 {
+      margin: 10px 0;
+    }
+
+    .btn {
+      padding: 10px 16px;
+      margin: 8px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+    }
+
+    .btn-level {
+      background: #4682b4;
+      color: white;
+    }
+
+    .btn-answer {
+      display: block;
+      width: 100%;
+      background: white;
+      margin: 6px 0;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      font-size: 16px;
+      padding: 10px;
+    }
+
+    #progress-bar {
+      height: 10px;
+      background: #ccc;
+      border-radius: 8px;
+      overflow: hidden;
+      margin: 12px 0;
+    }
+
+    #progress {
+      height: 100%;
+      width: 100%;
+      background: #4caf50;
+      transition: width 0.1s linear;
+    }
+
+    #message {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+
+    #scoreboard {
+      margin-top: 20px;
+      text-align: left;
+    }
+
+    #nav {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <h1>Таблица умножения</h1>
+    <div id="level-select">
+      <button class="btn btn-level" onclick="startGame('easy')">Лёгкий</button>
+      <button class="btn btn-level" onclick="startGame('hard')">Сложный</button>
+      <button class="btn btn-level" onclick="startGame('hero')">Супер-герой</button>
+      <button class="btn" onclick="showScoreboard()">🏆 Таблица рекордов</button>
+    </div>
+
+    <div id="game" style="display: none;">
+      <h2 id="question"></h2>
+      <div id="answers"></div>
+      <div id="progress-bar"><div id="progress"></div></div>
+      <div id="message"></div>
+      <div id="score">Серия: 0</div>
+      <div id="scoreboard"></div>
+      <div id="nav">
+        <button class="btn" onclick="changeLevel()">Сменить уровень</button>
+      </div>
+    </div>
+
+    <audio id="wrongSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg"></audio>
+  </div>
+
+  <script>
+    const timeLimits = {
+      easy: 10,
+      hard: 5,
+      hero: 3
+    };
+
+    const primeNumbers = [2, 3, 5, 7];
+
+    let timerInterval;
+    let currentAnswer;
+    let timeLeft = 0;
+    let correctStreak = 0;
+    let highScores = JSON.parse(localStorage.getItem('highScores') || '[]');
+    let selectedLevel = 'easy';
+    let lastAnswerTime = 0;
+
+    function startGame(level) {
+      selectedLevel = level;
+      correctStreak = 0;
+      updateScore();
+      document.getElementById('level-select').style.display = 'none';
+      document.getElementById('game').style.display = 'block';
+      nextQuestion();
+    }
+
+    function changeLevel() {
+      clearInterval(timerInterval);
+      document.getElementById('game').style.display = 'none';
+      document.getElementById('level-select').style.display = 'block';
+    }
+
+    function showScoreboard() {
+      alert(highScores.length ? `🏆 Рекорды:\n${highScores.map((s, i) => `${i + 1}. ${s} подряд`).join("\n")}` : "Рекордов пока нет.");
+    }
+
+    function nextQuestion() {
+      let a = primeNumbers[Math.floor(Math.random() * primeNumbers.length)];
+      let b = primeNumbers[Math.floor(Math.random() * primeNumbers.length)];
+
+      currentAnswer = a * b;
+      document.getElementById('question').textContent = `${a} × ${b} = ?`;
+
+      let answers = [currentAnswer];
+      while (answers.length < 4) {
+        const wrong = primeNumbers[Math.floor(Math.random() * primeNumbers.length)] *
+                      primeNumbers[Math.floor(Math.random() * primeNumbers.length)];
+        if (!answers.includes(wrong)) answers.push(wrong);
+      }
+
+      answers = answers.sort(() => Math.random() - 0.5);
+
+      document.getElementById('answers').innerHTML = answers.map(ans =>
+        `<button class="btn btn-answer" onclick="checkAnswer(${ans})">${ans}</button>`
+      ).join("");
+
+      document.getElementById('message').textContent = '';
+      startTimer();
+    }
+
+    function startTimer() {
+      clearInterval(timerInterval);
+      timeLeft = timeLimits[selectedLevel];
+      updateProgressBar();
+      lastAnswerTime = 0;
+
+      timerInterval = setInterval(() => {
+        timeLeft -= 0.1;
+        lastAnswerTime += 0.1;
+        updateProgressBar();
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          showMessage("⏰ Время вышло! Попробуй ещё!", false);
+          playWrongSound();
+          saveHighScore();
+          correctStreak = 0;
+          updateScore();
+          setTimeout(() => nextQuestion(), 1500);
+        }
+      }, 100);
+    }
+
+    function updateProgressBar() {
+      const percent = (timeLeft / timeLimits[selectedLevel]) * 100;
+      document.getElementById('progress').style.width = percent + '%';
+    }
+
+    function checkAnswer(answer) {
+      clearInterval(timerInterval);
+      if (answer === currentAnswer) {
+        correctStreak++;
+        updateScore();
+        if (correctStreak % 10 === 0) {
+          showMessage(`🎉 Ура! ${correctStreak} правильных подряд!`, true);
+        } else {
+          showMessage("✅ Молодец! Правильно!", true);
+        }
+        setTimeout(() => nextQuestion(), 1200);
+      } else {
+        showMessage("❌ Почти! Попробуй другой пример!", false);
+        playWrongSound();
+        saveHighScore();
+        correctStreak = 0;
+        updateScore();
+        setTimeout(() => nextQuestion(), 1500);
+      }
+    }
+
+    function showMessage(text, success) {
+      const msg = document.getElementById('message');
+      msg.textContent = text;
+      msg.style.color = success ? 'green' : 'red';
+    }
+
+    function updateScore() {
+      document.getElementById('score').textContent = `Серия: ${correctStreak}`;
+    }
+
+    function playWrongSound() {
+      document.getElementById('wrongSound').play();
+    }
+
+    function saveHighScore() {
+      highScores.push(correctStreak);
+      highScores = highScores.sort((a, b) => b - a).slice(0, 5);
+      localStorage.setItem('highScores', JSON.stringify(highScores));
+      updateScoreboard();
+    }
+
+    function updateScoreboard() {
+      const board = document.getElementById('scoreboard');
+      if (highScores.length === 0) return;
+      board.innerHTML = '<h3>🏆 Рекорды</h3><ol>' +
+        highScores.map(score => `<li>${score} подряд</li>`).join('') + '</ol>';
+    }
+
+    updateScoreboard();
+  </script>
+</body>
+</html>
+
